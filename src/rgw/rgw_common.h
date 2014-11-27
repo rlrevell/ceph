@@ -751,6 +751,132 @@ struct RGWObjVersionTracker {
   void generate_new_write_ver(CephContext *cct);
 };
 
+struct RGWBWRedirectInfo
+{
+  string protocol;
+  string hostname;
+  string replace_key_prefix_with;
+  string replace_key_with;
+  string http_redirect_code;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(protocol, bl);
+    ::encode(hostname, bl);
+    ::encode(replace_key_prefix_with, bl);
+    ::encode(replace_key_with, bl);
+    ::encode(http_redirect_code, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(protocol, bl);
+    ::decode(hostname, bl);
+    ::decode(replace_key_prefix_with, bl);
+    ::decode(replace_key_with, bl);
+    ::decode(http_redirect_code, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
+
+struct RGWBWRoutingRuleCondition
+{
+  string key_prefix_equals;
+  string http_error_code_returned_equals;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(key_prefix_equals, bl);
+    ::encode(http_error_code_returned_equals, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(key_prefix_equals, bl);
+    ::decode(http_error_code_returned_equals, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWBWRoutingRuleCondition)
+
+struct RGWBWRoutingRule
+{
+  RGWBWRoutingRuleCondition condition;
+  RGWBWRedirectInfo redirect_info;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(condition, bl);
+    ::encode(redirect_info, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(condition, bl);
+    ::decode(redirect_info, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWBWRoutingRule)
+
+struct RGWBWRoutingRules
+{
+  list<RGWBWRoutingRule> rules;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(rules, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(rules, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWBWRoutingRules)
+
+struct RGWBucketWebsiteConf
+{
+  string index_doc_suffix;
+  string error_doc;
+  RGWBWRoutingRules routing_rules;
+
+  RGWBucketWebsiteConf() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(index_doc_suffix, bl);
+    ::encode(error_doc, bl);
+    ::encode(routing_rules, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(index_doc_suffix, bl);
+    ::decode(error_doc, bl);
+    ::decode(routing_rules, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
+
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
@@ -786,8 +912,11 @@ struct RGWBucketInfo
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
+  bool has_website;
+  RGWBucketWebsiteConf website_conf;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 4, bl);
+     ENCODE_START(12, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -799,10 +928,14 @@ struct RGWBucketInfo
      ::encode(quota, bl);
      ::encode(num_shards, bl);
      ::encode(bucket_index_shard_hash_type, bl);
+     ::encode(has_website, bl);
+     if (has_website) {
+       ::encode(website_conf, bl);
+     }
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(12, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2)
        ::decode(owner, bl);
@@ -825,6 +958,14 @@ struct RGWBucketInfo
        ::decode(num_shards, bl);
      if (struct_v >= 11)
        ::decode(bucket_index_shard_hash_type, bl);
+     if (struct_v >= 12) {
+       ::decode(has_website, bl);
+       if (has_website) {
+         ::decode(website_conf, bl);
+       } else {
+         website_conf = RGWBucketWebsiteConf();
+       }
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -836,7 +977,8 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD),
+                    has_website(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
