@@ -118,6 +118,7 @@ void usage()
 "  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
 "  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
 "  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
+"  object-map rebuild <image-name>             rebuild an invalid object map\n"
 "  snap ls <image-name>                        dump list of image snapshots\n"
 "  snap create <snap-name>                     create a snapshot\n"
 "  snap rollback <snap-name>                   rollback image to snapshot\n"
@@ -2324,6 +2325,18 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
   return 0;
 }
 
+static int do_object_map_rebuild(librbd::Image &image)
+{
+  MyProgressContext pc("Object Map Rebuild");
+  int r = image.rebuild_object_map(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 static int do_kernel_map(const char *poolname, const char *imgname,
 			 const char *snapname)
 {
@@ -2494,6 +2507,14 @@ static int parse_map_options(char *options)
   return 0;
 }
 
+enum CommandType{
+  COMMAND_TYPE_NONE,
+  COMMAND_TYPE_SNAP,
+  COMMAND_TYPE_LOCK,
+  COMMAND_TYPE_METADATA,
+  COMMAND_TYPE_OBJECT_MAP
+};
+
 enum {
   OPT_NO_CMD = 0,
   OPT_LIST,
@@ -2532,11 +2553,14 @@ enum {
   OPT_METADATA_SET,
   OPT_METADATA_GET,
   OPT_METADATA_REMOVE,
+  OPT_OBJECT_MAP_REBUILD
 };
 
-static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
+static int get_cmd(const char *cmd, CommandType command_type)
 {
-  if (!snapcmd && !lockcmd) {
+  switch (command_type)
+  {
+  case COMMAND_TYPE_NONE:
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LIST;
@@ -2584,7 +2608,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
       return OPT_UNMAP;
     if (strcmp(cmd, "bench-write") == 0)
       return OPT_BENCH_WRITE;
-  } else if (snapcmd) {
+    break;
+  case COMMAND_TYPE_SNAP:
     if (strcmp(cmd, "create") == 0 ||
         strcmp(cmd, "add") == 0)
       return OPT_SNAP_CREATE;
@@ -2603,7 +2628,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
       return OPT_SNAP_PROTECT;
     if (strcmp(cmd, "unprotect") == 0)
       return OPT_SNAP_UNPROTECT;
-  } else if (metacmd) {
+    break;
+  case COMMAND_TYPE_METADATA:
     if (strcmp(cmd, "list") == 0)
       return OPT_METADATA_LIST;
     if (strcmp(cmd, "set") == 0)
@@ -2612,7 +2638,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
       return OPT_METADATA_GET;
     if (strcmp(cmd, "remove") == 0)
       return OPT_METADATA_REMOVE;
-  } else {
+    break;
+  case COMMAND_TYPE_LOCK:
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
       return OPT_LOCK_LIST;
@@ -2621,6 +2648,11 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
     if (strcmp(cmd, "remove") == 0 ||
 	strcmp(cmd, "rm") == 0)
       return OPT_LOCK_REMOVE;
+    break;
+  case COMMAND_TYPE_OBJECT_MAP:
+    if (strcmp(cmd, "rebuild") == 0)
+      return OPT_OBJECT_MAP_REBUILD;
+    break;
   }
 
   return OPT_NO_CMD;
@@ -2822,23 +2854,30 @@ int main(int argc, const char **argv)
       cerr << "rbd: which snap command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, true, false, false);
+    opt_cmd = get_cmd(*i, COMMAND_TYPE_SNAP);
   } else if (strcmp(*i, "lock") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
       cerr << "rbd: which lock command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, false, true, false);
+    opt_cmd = get_cmd(*i, COMMAND_TYPE_LOCK);
   } else if (strcmp(*i, "image-meta") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
       cerr << "rbd: which image-meta command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, false, false, true);
+    opt_cmd = get_cmd(*i, COMMAND_TYPE_METADATA);
+  } else if (strcmp(*i, "object-map") == 0) {
+    i = args.erase(i);
+    if (i == args.end()) {
+      cerr << "rbd: which object-map command do you want?" << std::endl;
+      return EXIT_FAILURE;
+    }
+    opt_cmd = get_cmd(*i, COMMAND_TYPE_OBJECT_MAP);
   } else {
-    opt_cmd = get_cmd(*i, false, false, false);
+    opt_cmd = get_cmd(*i, COMMAND_TYPE_NONE);
   }
   if (opt_cmd == OPT_NO_CMD) {
     cerr << "rbd: error parsing command '" << *i << "'; -h or --help for usage" << std::endl;
@@ -2881,6 +2920,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_LOCK_LIST:
       case OPT_METADATA_LIST:
       case OPT_DIFF:
+      case OPT_OBJECT_MAP_REBUILD:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_UNMAP:
@@ -3036,10 +3076,11 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 		      (char **)&imgname, (char **)&snapname);
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
-      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF && opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF &&
+      opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
-      opt_cmd != OPT_CHILDREN) {
+      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD) {
     cerr << "rbd: snapname specified for a command that doesn't use it"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3148,11 +3189,11 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_IMPORT_DIFF ||
        opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF || opt_cmd == OPT_COPY ||
-       opt_cmd == OPT_DIFF ||
+       opt_cmd == OPT_DIFF || opt_cmd == OPT_STATUS ||
        opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
        opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST ||
        opt_cmd == OPT_METADATA_REMOVE || opt_cmd == OPT_METADATA_GET ||
-       opt_cmd == OPT_STATUS)) {
+       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
@@ -3176,7 +3217,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_EXPORT_DIFF ||
        opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_COPY ||
-       opt_cmd == OPT_CHILDREN)) {
+       opt_cmd == OPT_CHILDREN ||
+       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "rbd: error setting snapshot context: " << cpp_strerror(-r)
@@ -3594,6 +3636,15 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_metadata_get(image, key);
     if (r < 0) {
       cerr << "rbd: getting metadata failed: " << cpp_strerror(r) << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_OBJECT_MAP_REBUILD:
+    r = do_object_map_rebuild(image);
+    if (r < 0) {
+      cerr << "rbd: rebuilding object map failed: " << cpp_strerror(r)
+           << std::endl;
       return -r;
     }
     break;

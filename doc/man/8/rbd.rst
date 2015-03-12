@@ -237,6 +237,10 @@ Commands
 :command:`mv` [*src-image*] [*dest-image*]
   Renames an image.  Note: rename across pools is not supported.
 
+:command:`object-map` rebuild [*image-name*]
+  Rebuilds an invalid object map for the specified image. An image snapshot can be
+  specified to rebuild an invalid object map for a snapshot.
+
 :command:`snap` ls [*image-name*]
   Dumps the list of snapshots inside a specific image.
 
