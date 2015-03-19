@@ -221,6 +221,8 @@ OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
+OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0)  // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
@@ -592,6 +594,11 @@ OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD 
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
+
+// default timeout while caling WaitInterval on an empty queue
+OPTION(threadpool_default_timeout, OPT_INT, 60)
+// default wait time for an empty queue before pinging the hb timeout
+OPTION(threadpool_empty_queue_max_wait, OPT_INT, 2)
 
 OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
 OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size

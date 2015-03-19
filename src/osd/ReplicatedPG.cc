@@ -6616,6 +6616,19 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
     return -EBUSY;
   }
 
+  if (!fop->blocking && scrubber.write_blocked_by_scrub(oid)) {
+    if (fop->op) {
+      dout(10) << __func__ << " blocked by scrub" << dendl;
+      requeue_op(fop->op);
+      requeue_ops(fop->dup_ops);
+      return -EAGAIN;    // will retry
+    } else {
+      osd->logger->inc(l_osd_tier_try_flush_fail);
+      cancel_flush(fop, false);
+      return -ECANCELED;
+    }
+  }
+
   // successfully flushed; can we clear the dirty bit?
   // try to take the lock manually, since we don't
   // have a ctx yet.
@@ -10855,6 +10868,14 @@ void ReplicatedPG::scan_range(
     } else {
       bufferlist bl;
       int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
+
+      /* If the object does not exist here, it must have been removed
+	 * between the collection_list_partial and here.  This can happen
+	 * for the first item in the range, which is usually last_backfill.
+	 */
+      if (r == -ENOENT)
+	continue;
+
       assert(r >= 0);
       object_info_t oi(bl);
       bi->objects[*p] = oi.version;
@@ -11659,8 +11680,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 
     // FIXME: ignore temperature for now.
 
-    // KISS: if [lower,upper] spans our target effort, evict it.
-    if (atime_lower >= agent_state->evict_effort)
+    if (1000000 - atime_upper >= agent_state->evict_effort)
       return false;
   }
 
@@ -11914,8 +11934,9 @@ void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
       return;
   }
   time_t now = ceph_clock_now(NULL).sec();
-  for (map<time_t,HitSetRef>::iterator p = agent_state->hit_set_map.begin();
-       p != agent_state->hit_set_map.end();
+  for (map<time_t,HitSetRef>::reverse_iterator p =
+	 agent_state->hit_set_map.rbegin();
+       p != agent_state->hit_set_map.rend();
        ++p) {
     if (p->second->contains(oid)) {
       if (*atime < 0)
