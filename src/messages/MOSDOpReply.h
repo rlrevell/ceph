@@ -155,7 +155,7 @@ private:
 public:
   virtual void encode_payload(uint64_t features) {
 
-    BLKIN_GET_MASTER(mt);
+    BLKIN_GET_MASTER();
 
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 

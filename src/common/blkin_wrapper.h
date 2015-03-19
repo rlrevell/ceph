@@ -8,8 +8,8 @@
   OSS << A;
 
 // src/msg/Message.h
-#define BLKIN_GET_MASTER(MT) \
-  ZTracer::ZTraceRef MT = get_master_trace();
+#define BLKIN_GET_MASTER() \
+  ZTracer::ZTraceRef blkin_master_trace = get_master_trace();
 
 #define BLKIN_MSG_GET_MASTER(MT, MSG) \
   ZTracer::ZTraceRef MT = (MSG)->get_master_trace();
@@ -31,9 +31,9 @@
 
 #define BLKIN_MSG_ENCODE_TRACE() \
   do { \
-    if (mt) { \
+    if (blkin_master_trace) { \
       struct blkin_trace_info tinfo; \
-      mt->get_trace_info(&tinfo); \
+      blkin_master_trace->get_trace_info(&tinfo); \
       ::encode(tinfo.trace_id, payload); \
       ::encode(tinfo.span_id, payload); \
       ::encode(tinfo.parent_span_id, payload); \
