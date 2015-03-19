@@ -25,13 +25,8 @@
 
 class MOSDSubOp : public Message {
 
-#ifdef WITH_BLKIN
   static const int HEAD_VERSION = 12;
-#else
-  static const int HEAD_VERSION = 11;
   static const int COMPAT_VERSION = 7;
-#endif
-  static const int COMPAT_VERSION = 1;
 
 public:
   epoch_t map_epoch;
@@ -184,7 +179,7 @@ public:
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
     ::encode(poid, payload);
-    BLKIN_GET_MASTER(mt);
+    BLKIN_GET_MASTER();
 
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);

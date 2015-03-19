@@ -32,11 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-#ifdef WITH_BLKIN
   static const int HEAD_VERSION = 7;
-#else
-  static const int HEAD_VERSION = 6;
-#endif
   static const int COMPAT_VERSION = 2;
 
   object_t oid;

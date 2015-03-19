@@ -30,11 +30,7 @@
  */
 
 class MOSDSubOpReply : public Message {
-#ifdef WITH_BLKIN
   static const int HEAD_VERSION = 3;
-#else
-  static const int HEAD_VERSION = 2;
-#endif
   static const int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch;
@@ -92,7 +88,7 @@ public:
     BLKIN_MSG_DECODE_TRACE(3);
   }
   virtual void encode_payload(uint64_t features) {
-    BLKIN_GET_MASTER(mt);
+    BLKIN_GET_MASTER();
 
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);

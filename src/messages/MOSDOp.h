@@ -32,11 +32,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-#ifdef WITH_BLKIN
   static const int HEAD_VERSION = 6;
-#else
-  static const int HEAD_VERSION = 5;
-#endif
   static const int COMPAT_VERSION = 3;
 
 private:
