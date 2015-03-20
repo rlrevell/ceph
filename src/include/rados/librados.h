@@ -1738,10 +1738,13 @@ CEPH_RADOS_API int rados_aio_write(rados_ioctx_t io, const char *oid,
 
 #ifdef WITH_BLKIN
 struct blkin_trace_info;
-int rados_aio_write_traced(rados_ioctx_t io, const char *oid,
-        rados_completion_t completion,
-        const char *buf, size_t len, uint64_t off,
-        struct blkin_trace_info *info);
+CEPH_RADOS_API int rados_aio_write_traced(rados_ioctx_t io,
+					  const char *oid,
+					  rados_completion_t completion,
+					  const char *buf,
+					  size_t len,
+					  uint64_t off,
+					  struct blkin_trace_info *info);
 #endif
 /**
  * Asychronously append data to an object
@@ -1825,11 +1828,14 @@ CEPH_RADOS_API int rados_aio_read(rados_ioctx_t io, const char *oid,
 		                  rados_completion_t completion,
 		                  char *buf, size_t len, uint64_t off);
 
-#ifdef WTIH_BLKIN
-int rados_aio_read_traced(rados_ioctx_t io, const char *oid,
-        rados_completion_t completion,
-        char *buf, size_t len, uint64_t off,
-        struct blkin_trace_info *info);
+#ifdef WITH_BLKIN
+CEPH_RADOS_API int rados_aio_read_traced(rados_ioctx_t io,
+					 const char *oid,
+					 rados_completion_t completion,
+					 char *buf,
+					 size_t len,
+					 uint64_t off,
+					 struct blkin_trace_info *info);
 #endif
 /**
  * Block until all pending writes in an io context are safe

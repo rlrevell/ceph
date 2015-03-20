@@ -674,10 +674,6 @@ int librados::IoCtxImpl::aio_read_traced(const object_t oid, AioCompletionImpl *
   c->bl.push_back(buffer::create_static(len, buf));
   c->blp = &c->bl;
 
-  c->tid = objecter->read(oid, oloc,
-		 off, len, snapid, &c->bl, 0,
-		 onack, &c->objver);
-
   trace->event("send to objecter");
   struct blkin_trace_info *child_info = (struct blkin_trace_info *)
       malloc(sizeof(struct blkin_trace_info));
@@ -779,10 +775,6 @@ int librados::IoCtxImpl::aio_write_traced(const object_t &oid, AioCompletionImpl
 
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
-
-  c->tid = objecter->write(oid, oloc,
-		  off, len, snapc, bl, ut, 0,
-		  onack, onsafe, &c->objver);
 
   trace->event("send to objecter");
   struct blkin_trace_info *child_info = (struct blkin_trace_info *)

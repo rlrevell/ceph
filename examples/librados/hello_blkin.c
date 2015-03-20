@@ -86,7 +86,8 @@ int main()
   r = rados_aio_write_traced(*rados_ctx, object_name, compl, object_val, 12,
       0, &trace.info);
 
-  rados_aio_wait_for_complete(compl);
+  rados_aio_wait_for_safe(compl);
+  rados_aio_release(compl);
   printf("completed\n");
 
   //read an object
@@ -98,7 +99,8 @@ int main()
   printf("created completion\n");
   r = rados_aio_read_traced(*rados_ctx, object_name, compl, temp, 12, 0,
       &trace.info);
-  rados_aio_wait_for_complete(compl);
+  rados_aio_wait_for_safe(compl);
+  rados_aio_release(compl);
   printf("I read:\n");
   for (i=0;i<12;i++)
     printf("%c",temp[i]);
