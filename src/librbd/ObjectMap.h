@@ -119,13 +119,11 @@ private:
   };
 
   ImageCtx &m_image_ctx;
-
   ceph::BitVector<2> m_object_map;
-
   bool m_enabled;
 
   void invalidate();
-
+  void resize(uint64_t num_objs, uint8_t defualt_state);
 };
 
 } // namespace librbd
