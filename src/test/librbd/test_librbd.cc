@@ -2624,7 +2624,6 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
   ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(2U, pairs.size());
-  const char * ddd = pairs["key1"].c_str();
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
@@ -2672,4 +2671,62 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
+}
+
+TEST_F(TestLibRBD, RebuildObjectMap)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  PrintProgress prog_ctx;
+  std::string object_map_oid;
+  bufferlist bl;
+  bl.append("foo");
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t features;
+    ASSERT_EQ(0, image.features(&features));
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+      ASSERT_EQ(-EINVAL, image.rebuild_object_map(prog_ctx));
+      return;
+    }
+
+    ASSERT_EQ(bl.length(), image.write(0, bl.length(), bl));
+
+    librbd::image_info_t info;
+    ASSERT_EQ(0, image.stat(info, sizeof(info)));
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    object_map_oid = RBD_OBJECT_MAP_PREFIX + image_id;
+  }
+
+  // corrupt the object map
+  ASSERT_EQ(0, ioctx.write(object_map_oid, bl, bl.length(), 0));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint64_t flags;
+  ASSERT_EQ(0, image.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
+
+  ASSERT_EQ(0, image.rebuild_object_map(prog_ctx));
+
+  bufferlist read_bl;
+  ASSERT_EQ(bl.length(), image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  ASSERT_PASSED(validate_object_map, image);
 }
