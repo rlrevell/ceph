@@ -1,5 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#ifndef CEPH_BLKIN_WRAPPER_H
+#define CEPH_BLKIN_WRAPPER_H
 #ifdef WITH_BLKIN
 
 // string helper
@@ -184,3 +186,4 @@ typedef ZTracer::ZTraceRef TrackedOpTraceRef;
 #define BLKIN_OP_SET_TRACE(O, T) do { } while(0)
 
 #endif // WITH_BLKIN
+#endif // CEPH_BLKIN_WRAPPER_H

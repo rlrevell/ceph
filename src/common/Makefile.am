@@ -222,6 +222,7 @@ noinst_HEADERS += \
 	common/Cycles.h \
 	common/Initialize.h \
 	common/ContextCompletion.h \
+	common/blkin_wrapper.h \
 	common/bit_vector.hpp
 
 if ENABLE_XIO
