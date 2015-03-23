@@ -2223,11 +2223,25 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 				  const object_locator_t& oloc,
 				  OpRequestRef op)
 {
+
   if (!obc) { // we need to create an ObjectContext
     assert(missing_oid != hobject_t());
     obc = get_object_context(missing_oid, true);
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
+  if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
+    dout(10) << __func__ << " " << obc->obs.oi.soid << 
+	     << " blocked by scrub" << dendl;
+    if (op) {
+      waiting_for_active.push_back(op);
+      dout(10) << __func__ << " " << obc->obs.oi.soid << 
+	       << " placing op in waiting_for_active" << dendl;
+    } else {
+      dout(10) << __func__ << " " << obc->obs.oi.soid << 
+	       << " no op, dropping on the floor" << dendl;
+    }
+    return;
+  }
 
   PromoteCallback *cb = new PromoteCallback(obc, this);
   object_locator_t my_oloc = oloc;
@@ -12901,7 +12915,8 @@ void ReplicatedPG::_scrub(
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    if (pool.info.is_replicated()) {
+    if (pool.info.is_replicated() &&
+	(get_min_peer_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST)) {
       if (oi.is_data_digest() && p->second.digest_present &&
 	  oi.data_digest != p->second.digest) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
